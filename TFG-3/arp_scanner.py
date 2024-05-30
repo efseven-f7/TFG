@@ -1,7 +1,7 @@
 from scapy.all import ARP, Ether, srp, sniff
 from HID import HID
 from db_communication import EXCLUDED_IPS, EXCLUDED_MACS, update_device_status, insert_device_data, get_config
-from honeypot_manager import lanzar_honeypot, tumbar_honeypot, verificar_honeyd
+from honeypot_manager import lanzar_honeypot, stop_honeypot, check_honeyd
 import uuid
 import socket
 
@@ -56,7 +56,7 @@ def check_new_host_up(q):
         if pkt.haslayer(ARP) and pkt[ARP].op == 1:  # who-has (request)
             ip = pkt[ARP].psrc
             mac = pkt[ARP].hwsrc
-            if ip not in excluded_ips and mac not in excluded_macs and verificar_honeyd():
+            if ip not in excluded_ips and mac not in excluded_macs and check_honeyd():
                 q.put(HID(ip, mac, None, 'online'))
                 # print(f"Detected ARP request packet: {ip} ({mac})")
 

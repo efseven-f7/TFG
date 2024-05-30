@@ -1,13 +1,17 @@
 #!/usr/bin/python3
 
 import datetime
+import os
 from mysql.connector import pooling, errors, Error
 import uuid
 import socket
 import time
 
-EXCLUDED_IPS = ["10.10.10.1", "10.10.10.2", "10.10.10.254", "0.0.0.0"]
+#10.10.10.1, 10.10.10.2, 10.10.10.254 are administrative IP addresses. For testing purposes I exclude them from the network scan.
+EXCLUDED_IPS = ["0.0.0.0", "10.10.10.1", "10.10.10.2", "10.10.10.254"]
 EXCLUDED_MACS = ["00:00:00:00:00:00"]
+
+honeyd_log = os.path.abspath('logs/honeyd_log.txt')
 
 # Función para obtener la dirección IP de la propia máquina
 def get_local_ip():
@@ -64,7 +68,7 @@ def get_db_connection():
         time.sleep(1)  # Espera 1 segundo antes de reintentar
     return None
 
-def obtener_timestamp():
+def get_timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def insert_device_data(ip, mac):
@@ -141,12 +145,12 @@ def insert_or_update_honeypot_log(honeypot_ip, honeypot_mac, log_data):
         if log:
             cursor.execute(
                 "UPDATE honeypot_logs SET log_file = %s, timestamp = %s, status = %s WHERE id = %s",
-                (log_data, obtener_timestamp(), "online", log[0])
+                (log_data, get_timestamp(), "online", log[0])
             )
         else:
             cursor.execute(
                 "INSERT INTO honeypot_logs (honeypot_id, timestamp, log_file, status) VALUES (%s, %s, %s, %s)",
-                (device_id, obtener_timestamp(), log_data, "online")
+                (device_id, get_timestamp(), log_data, "online")
             )
         conn.commit()
         cursor.close()
@@ -201,7 +205,7 @@ def update_device_services(ip, services):
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE devices SET services = %s, last_updated = %s WHERE ip = %s",
-            (','.join(str(port) for port in services), obtener_timestamp(), ip)
+            (','.join(str(port) for port in services), get_timestamp(), ip)
         )
         conn.commit()
         cursor.close()
@@ -268,7 +272,7 @@ def get_alert_by_id(alert_id):
 
 def get_alert_logs(ip, port, timestamp):
     logs = []
-    log_path = "/home/efseven/TFG-3/logs/honeyd_serv_log.txt"
+    log_path = os.path.abspath("logs/honeyd_serv_log.txt")
     with open(log_path, "r") as file:
         for line in file:
             aux_line = line.split()
@@ -302,8 +306,7 @@ def get_honeypots_data():
 
 def get_honeypot_logs(ip, mac):
     logs = []
-    log_path = "/home/efseven/TFG-3/logs/honeyd_log.txt"
-    with open(log_path, "r") as file:
+    with open(honeyd_log, "r") as file:
         for line in file:
             if ip in line or mac in line:
                 logs.append(line.strip())
@@ -329,7 +332,7 @@ def update_honeypot_status(ip, status):
         device_id = device[0]
         
         cursor.execute("UPDATE honeypot_logs SET status = %s, timestamp = %s WHERE honeypot_id = %s", 
-                       (status, obtener_timestamp(), device_id))
+                       (status, get_timestamp(), device_id))
         conn.commit()
         cursor.close()
         conn.close()

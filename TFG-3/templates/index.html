@@ -29,9 +29,6 @@
 </head>
 <body>
     <div class="navbar">
-        <div class="left">
-            <a href="#" id="systemButton" onclick="toggleSystem()">Start System</a>
-        </div>
         <div class="right">
             <a href="/">Home</a>
             <a href="/monitor">Monitor</a>
@@ -79,24 +76,7 @@
         </tbody>
     </table>
 
-    <script>
-        function toggleSystem() {
-            const button = document.getElementById('systemButton');
-            const systemRunning = localStorage.getItem('systemRunning') === 'true';
-
-            if (systemRunning) {
-                button.textContent = 'Start System';
-                localStorage.setItem('systemRunning', 'false');
-                // Add the code to stop the system
-                fetch('/stop_system', { method: 'POST' });
-            } else {
-                button.textContent = 'Stop System';
-                localStorage.setItem('systemRunning', 'true');
-                // Add the code to start the system
-                fetch('/start_system', { method: 'POST' });
-            }
-        }
-        
+    <script>        
         document.addEventListener("DOMContentLoaded", function() {
             loadDevicesData();
             loadHoneypotsData();

@@ -6,7 +6,7 @@ import time
 from cupshelpers import getDevices
 from db_communication import get_config, get_device_data, insert_or_update_honeypot_log, update_honeypot_status, update_device_status
 
-def lanzar_honeyd(network_range, conf_file, log_file, serv_log_file):
+def launch_honeyd(network_range, conf_file, log_file, serv_log_file):
     comando = f"honeyd -f {conf_file} -l {log_file} -s {serv_log_file} {network_range} > /dev/null"
     proceso = subprocess.Popen(comando, shell=True)
     time.sleep(2)  # Espera un poco para que Honeyd se inicie completamente
@@ -22,7 +22,7 @@ def lanzar_honeyd(network_range, conf_file, log_file, serv_log_file):
     except subprocess.CalledProcessError:
         print("Error: Honeyd no se ha iniciado correctamente")
 
-def tumbar_honeyd():
+def stop_honeyd():
     try:
         honeyd_pids = subprocess.check_output(["pidof", "honeyd"]).decode().split()
         if honeyd_pids:
@@ -31,14 +31,14 @@ def tumbar_honeyd():
     except subprocess.CalledProcessError:
         pass
 
-def verificar_honeyd():
+def check_honeyd():
     try:
         honeyd_pids = subprocess.check_output(["pidof", "honeyd"]).decode().split()
         return any("honeyd" in open(f"/proc/{pid}/cmdline").read().split('\x00') for pid in honeyd_pids)
     except subprocess.CalledProcessError:
         return False
 
-def verificar_honeypot(ip):
+def check_honeypot(ip):
     try:
         # Revisa si la IP del honeypot está siendo manejada por honeyd
         output = subprocess.check_output(f"echo 'list template' | honeydctl | grep {ip}", shell=True)
@@ -52,12 +52,12 @@ def lanzar_honeypot(hid, running_honeypots):
 
     config = get_config()
     # Checks if honeyd is running
-    if not verificar_honeyd():
+    if not check_honeyd():
         print("Honeyd is not running")
         return running_honeypots
 
     # Check if the honeypot is already launched
-    if verificar_honeypot(hid.get_ip()):
+    if check_honeypot(hid.get_ip()):
         print(f"Honeypot with IP {hid.get_ip()} is already launched.")
         if hid.get_ip() not in running_honeypots:
             running_honeypots.append(hid.get_ip())
@@ -83,13 +83,13 @@ def lanzar_honeypot(hid, running_honeypots):
 
     return running_honeypots
 
-def tumbar_honeypot(honeypot_ip):
+def stop_honeypot(honeypot_ip):
     # Verifica si el honeypot ya está lanzado
-    if verificar_honeypot(honeypot_ip):
+    if check_honeypot(honeypot_ip):
         try:
             subprocess.run(f"echo 'delete {honeypot_ip}' | honeydctl", shell=True, check=True)
             time.sleep(1)
-            while verificar_honeypot(honeypot_ip):
+            while check_honeypot(honeypot_ip):
                 subprocess.run(f"echo 'delete {honeypot_ip}' | honeydctl", shell=True, check=True)
             print(f"Honeypot {honeypot_ip} tumbado correctamente")
             update_honeypot_status(honeypot_ip, "offline")  # Actualiza el estado a 'offline'

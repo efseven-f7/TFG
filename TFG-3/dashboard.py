@@ -1,4 +1,5 @@
 import ipaddress
+import os
 import signal
 import sys
 from flask import Flask, render_template, request, redirect, url_for, jsonify
@@ -7,12 +8,12 @@ import db_communication as db
 from collections import Counter
 import controller
 import requests
-
-from honeypot_manager import lanzar_honeyd, tumbar_honeyd, verificar_honeyd
+from honeypot_manager import check_honeyd
 
 app = Flask(__name__)
 
 config = db.get_config()
+honeyd_log = os.path.abspath('logs/honeyd_log.txt')
 
 @app.route('/config', methods=['GET', 'POST'])
 def system_config():
@@ -44,14 +45,14 @@ def get_honeyd_activity_data():
 
 @app.route('/get_devices_data')
 def get_devices_data():
-    if verificar_honeyd():
+    if check_honeyd():
         devices = db.get_devices_data()
         return jsonify(devices)
     return jsonify()
 
 @app.route('/get_honeypots_data')
 def get_honeypots_data():
-    if verificar_honeyd():
+    if check_honeyd():
         honeypots = db.get_honeypots_data()
         return jsonify(honeypots)
     return jsonify()
@@ -146,6 +147,11 @@ def check_config(config):
     #     return False
     return True
 
+@app.route('/honeyd_status', methods=['GET'])
+def honeyd_status():
+    is_running = check_honeyd() 
+    return jsonify({'isRunning': is_running})
+
 @app.route('/start_system', methods=['POST'])
 def start_system():
     # Add code to start the system
@@ -185,7 +191,7 @@ def parse_log_file():
         'other': 0
     }
 
-    with open("/home/efseven/TFG-3/logs/honeyd_log.txt", 'r') as file:
+    with open(honeyd_log, 'r') as file:
         for line in file:
             parts = line.split()
             if len(parts) >= 6:
@@ -226,7 +232,7 @@ def get_top_ips_from_logs():
     dst_ips = Counter()
     excluded_network = ipaddress.ip_network("10.10.10.0/24")
 
-    with open("/home/efseven/TFG-3/logs/honeyd_log.txt", 'r') as file:
+    with open(honeyd_log, 'r') as file:
         for line in file:
             parts = line.split()
             if len(parts) >= 6:
@@ -245,7 +251,7 @@ def get_top_ips_from_logs():
 def get_top_ports_services_from_logs():
     ports_services = Counter()
 
-    with open("/home/efseven/TFG-3/logs/honeyd_log.txt", 'r') as file:
+    with open(honeyd_log, 'r') as file:
         for line in file:
             parts = line.split()
             if len(parts) > 6:
@@ -270,5 +276,13 @@ def signal_handler(signal, frame):
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
+    
+    try:
+        if os.getuid() != 0:
+            print("Please execute the system as root (sudo)")
+            exit(1)
+    except Exception as e:
+        raise Exception(e)
+
     app.run(debug=False, threaded=True, port=8000, use_reloader=False)
     
