@@ -1,50 +1,61 @@
+from distutils.cygwinccompiler import check_config_h
 import ipaddress
 import os
-import signal
 import sys
+import signal
 from flask import Flask, render_template, request, redirect, url_for, jsonify
-import datetime
-import db_communication as db
 from collections import Counter
-import controller
+import datetime
 import requests
+import db_communication as db
+import controller
 from honeypot_manager import check_honeyd
 
 app = Flask(__name__)
 
+# Load initial configuration from database
 config = db.get_config()
 honeyd_log = os.path.abspath('logs/honeyd_log.txt')
 
 @app.route('/config', methods=['GET', 'POST'])
 def system_config():
+    """Route to handle system configuration via web form."""
     global config
     if request.method == 'POST':
-        config['network_range'] = request.form.get('network_range')
-        config['whitelist_connections'] = request.form.get('whitelist_connections').strip()
-        config['whitelist_ips'] = request.form.get('whitelist_ips').strip()
-        config['whitelist_ports'] = request.form.get('whitelist_ports').strip()
-        config['scan_interval'] = int(request.form.get('scan_interval'))
-        config['port_scan_interval'] = int(request.form.get('port_scan_interval'))
-        db.update_config(config)
+        # Update configuration based on form data
+        config.update({
+            'network_range': request.form.get('network_range'),
+            'whitelist_connections': request.form.get('whitelist_connections').strip(),
+            'whitelist_ips': request.form.get('whitelist_ips').strip(),
+            'whitelist_ports': request.form.get('whitelist_ports').strip(),
+            'scan_interval': int(request.form.get('scan_interval')),
+            'port_scan_interval': int(request.form.get('port_scan_interval'))
+        })
+        if check_config(config):
+            db.update_config(config)
         return redirect(url_for('system_config'))
     return render_template('config.html')
 
 @app.route('/monitor')
 def system_monitor():
+    """Display the monitoring dashboard."""
     return render_template('monitor.html')
 
 @app.route('/map')
 def map():
+    """Display a map visualization (assuming geographical data is available)."""
     return render_template('map.html')
 
 @app.route('/get_honeyd_activity_data')
 def get_honeyd_activity_data():
+    """Retrieve activity data for Honeyd service."""
     timestamps, _ = parse_log_file()
     activity_count = {timestamp.strftime('%Y-%m-%d %H:%M:%S'): count for timestamp, count in timestamps.items()}
     return jsonify(timestamps=list(activity_count.keys()), activity_counts=list(activity_count.values()))
 
 @app.route('/get_devices_data')
 def get_devices_data():
+    """API endpoint to get data about monitored devices."""
     if check_honeyd():
         devices = db.get_devices_data()
         return jsonify(devices)
@@ -52,6 +63,7 @@ def get_devices_data():
 
 @app.route('/get_honeypots_data')
 def get_honeypots_data():
+    """API endpoint to get data about active honeypots."""
     if check_honeyd():
         honeypots = db.get_honeypots_data()
         return jsonify(honeypots)
@@ -59,138 +71,209 @@ def get_honeypots_data():
 
 @app.route('/get_honeyd_events_data')
 def get_honeyd_events_data():
+    """Retrieve event data from Honeyd logs."""
     _, event_counts = parse_log_file()
     return jsonify(event_types=list(event_counts.keys()), event_counts=list(event_counts.values()))
 
 @app.route('/get_top_ips')
 def get_top_ips():
+    """API endpoint to retrieve top source and destination IPs."""
     top_src_ips, top_dst_ips = get_top_ips_from_logs()
     return jsonify(top_src_ips=top_src_ips, top_dst_ips=top_dst_ips)
 
 @app.route('/get_top_ports_services')
 def get_top_ports_services():
+    """API endpoint to retrieve top ports and services accessed."""
     top_ports_services = get_top_ports_services_from_logs()
     return jsonify(top_ports_services=top_ports_services)
 
 @app.route('/get_geolocation_data')
 def get_geolocation_data():
+    """API endpoint to get geolocation data for top source IPs."""
     ip_locations = []
-
     top_src_ips, _ = get_top_ips_from_logs()
     for ip, _ in top_src_ips:
         try:
             response = requests.get(f"https://geolocation-db.com/json/{ip}&position=true").json()
             if response['latitude'] and response['longitude']:
-                ip_locations.append({
-                    'ip': ip,
-                    'latitude': response['latitude'],
-                    'longitude': response['longitude']
-                })
+                ip_locations.append({'ip': ip, 'latitude': response['latitude'], 'longitude': response['longitude']})
         except Exception as e:
-            print(f"Error getting the location para {ip}: {e}")
-
+            print(f"Error getting location for {ip}: {e}")
     return jsonify(ip_locations=ip_locations)
+
+@app.route('/alert')
+def alert():
+    """
+    Route to display alerts generated by the system. This could involve alerts triggered by specific
+    events captured in the Honeyd logs or other monitoring triggers set within the system.
+    """
+    try:
+        # Parse the log file to generate and retrieve alert data.
+        parse_log_file()
+        # Render the alert template, potentially passing in dynamic alert data if available.
+        return render_template('alert.html')
+    except Exception as e:
+        print(f"Error processing alerts: {e}")
+        # Handle errors gracefully by potentially displaying an error message on the alert page.
+        return render_template('alert.html', error="Failed to load alerts due to a system error.")
 
 @app.route('/get_alerts')
 def get_alerts():
+    """API endpoint to get current alerts."""
     alerts = db.get_alerts()
     return jsonify(alerts=alerts)
 
 @app.route('/alert/<int:alert_id>')
 def alert_details(alert_id):
+    """Route to display details for a specific alert."""
     alert = db.get_alert_by_id(alert_id)
     logs = db.get_alert_logs(alert['ip'], alert['port'], alert['timestamp'])
     return render_template('alert_details.html', alert=alert, logs=logs)
 
-@app.route('/alert')
-def alert():
-    parse_log_file()
-    return render_template('alert.html')
-
 @app.route('/honeypot/<ip>/<mac>')
 def honeypot_logs(ip, mac):
+    """Route to display logs specific to a honeypot identified by IP and MAC."""
     logs = db.get_honeypot_logs(ip, mac)
     return render_template('honeypot.html', ip=ip, mac=mac, logs=logs)
 
-def check_network_string(network_string):
-    try:
-        # Check if it's a valid IP address (IPv4 or IPv6)
-        ip = ipaddress.ip_address(network_string)
-        print(f"{network_string} is a valid IP address")
-        return True
-    except ValueError:
-        pass
-
-    try:
-        # Check if it's a valid network (IPv4 or IPv6)
-        network = ipaddress.ip_network(network_string, strict=False)
-        if network_string == str(network.network_address):
-            print(f"{network_string} is a valid network address")
-            return True
-        else:
-            print(f"{network_string} is a valid network range")
-            return True
-    except ValueError:
-        pass
-
-    return False
-
-def check_config(config):
-    if not check_network_string(config['network_range']):
-         print("Network range not valid")
-         return False
-    elif not db.get_db_connection():
-         print("Database config not valid")
-         return False
-    # elif os.path.exists(config['honeyd_conf_file']) and os.path.exists(config['honeyd_log_file']) and os.path.exists(config['honeyd_log_file']):
-    #     print("Honeyd file paths are not valid")
-    #     return False
-    return True
-
-@app.route('/honeyd_status', methods=['GET'])
-def honeyd_status():
-    is_running = check_honeyd() 
-    return jsonify({'isRunning': is_running})
-
 @app.route('/start_system', methods=['POST'])
 def start_system():
-    # Add code to start the system
-    config = db.get_config()
+    """
+    Start the entire monitoring and honeypot deployment system. This function triggers the start process,
+    which involves initializing various components based on the current configuration settings.
+    """
+    config = db.get_config()  # Retrieve the current system configuration from the database
 
     if check_config(config):
-        print("Config verificado correctamente")
-        print("System starting.....")
-        controller.start_system(config)
+        # If the configuration check passes, proceed to start the system
+        print("Configuration verified successfully. System starting...")
+        controller.start_system(config)  # Call to controller function that initiates system components
+        return '', 204  # Return a no content status to indicate successful initiation without content to return
     else:
-        print("ERROR: Comprobar config")
-    return '', 204
+        # If the configuration check fails, log an error and return an appropriate response
+        print("ERROR: Configuration check failed.")
+        return jsonify({"error": "Configuration check failed"}), 400  # Return a bad request status
 
 @app.route('/stop_system', methods=['POST'])
 def stop_system():
-    print("Stopping the system....")
-    # Add code to stop the system
-    controller.stop_system()
-    return '', 204
+    """
+    Stop the monitoring and honeypot deployment system. This function triggers the shutdown process,
+    which involves stopping and cleaning up resources used by the system components.
+    """
+    try:
+        print("Stopping the system...")
+        controller.stop_system()  # Call to controller function that handles the system shutdown
+        return '', 204  # Return a no content status to indicate successful shutdown without content to return
+    except Exception as e:
+        # Handle any exceptions that occur during the stop process
+        print(f"Failed to stop the system: {e}")
+        return jsonify({"error": "Failed to stop the system"}), 500  # Return an internal server error status
 
 @app.route('/')
 def index():
-    honeypots = db.get_honeypots_data()
-    return render_template('index.html', honeypots=honeypots)
+    """
+    The root route of the web application that serves as the landing page.
+    It fetches data about active honeypots from the database and displays them on the homepage.
+    """
+    try:
+        # Retrieve data about honeypots to be displayed on the homepage.
+        honeypots = db.get_honeypots_data()
+        return render_template('index.html', honeypots=honeypots)
+    except Exception as e:
+        print(f"Failed to load honeypot data: {e}")
+        # In case of an error, an error message or an empty page could be shown instead.
+        return render_template('index.html', honeypots=[])
 
-def send_alert(ip, port, timestamp):
-    message = f"A device with IP {ip} has connected to the honeypot on port {port}."
-    db.insert_alert(ip, port, message, timestamp)
-    # print(f"Alert - {timestamp}: {message}")
+def check_network_string(network_string):
+    """
+    Validates if the given string is either a valid IPv4 or IPv6 address or network.
+    Useful for ensuring that network-related configuration settings are correct.
+
+    Args:
+    network_string (str): The network string to validate as an IP address or network.
+
+    Returns:
+    bool: True if the string is a valid IP address or network, False otherwise.
+    """
+    # Try to validate as an IP address
+    try:
+        ipaddress.ip_address(network_string)
+        return True
+    except ValueError:
+        pass  # Not a valid IP address, proceed to check as a network
+
+    # Try to validate as a network
+    try:
+        network = ipaddress.ip_network(network_string, strict=False)
+        if network_string == str(network.network_address):
+            return True
+        else:
+            return True
+    except ValueError:
+        pass  # Not a valid network
+
+    # If neither an IP address nor a network, return False
+    print(f"{network_string} is neither a valid IP address nor a network")
+    return False
+
+
+def check_config(config):
+    """
+    Validates the system configuration to ensure all required fields are correctly set and valid.
+    This includes checking network settings, database connectivity, and necessary file paths.
+    
+    Args:
+    config (dict): Configuration dictionary containing system settings.
+
+    Returns:
+    bool: True if the configuration is valid, False otherwise.
+    """
+    try:
+        # Validate the network range is a valid IP network
+        if not check_network_string(config['network_range']):
+            print("Invalid network range.")
+            return False
+        
+        # Validate the whitelist connections is a valid input
+        connections = config['whitelist_connections']
+        if isinstance(connections, str):
+            connections = connections.strip("[]''").split(',')
+        for connection in connections:
+            connection = connection.split('-')
+
+            if not check_network_string(connection[0].strip("[]'' ")) or not check_network_string(connection[1].strip("[]'' ")):
+                print("Invalid whitelist connections.")
+                return False
+            
+        # Validate the whitelist ips is a valid input
+        ips = config['whitelist_ips']
+        if isinstance(ips, str):
+            ips = ips.strip("[]'\" ").split(',')
+        for ip in ips:
+            if not check_network_string(ip.strip("[]''\"\" ")):
+                print("Invalid whitelist IPs.")
+                return False
+            
+        # Ensure the database connection can be established
+        if not db.get_db_connection():
+            print("Database configuration not valid.")
+            return False
+        
+        return True  # Configuration is valid
+    except KeyError as e:
+        # Catch missing keys in the configuration dictionary
+        print(f"Configuration error: missing {str(e)}")
+        return False
+    except Exception as e:
+        # General exception catch to handle unexpected errors
+        print(f"An error occurred while checking configuration: {e}")
+        return False
+
 
 def parse_log_file():
+    """Parse the Honeyd log file to extract event timestamps and counts."""
     timestamps = {}
-    event_counts = {
-        'tcp': 0,
-        'icmp': 0,
-        'udp': 0,
-        'other': 0
-    }
-
+    event_counts = {'tcp': 0, 'icmp': 0, 'udp': 0, 'other': 0}
     with open(honeyd_log, 'r') as file:
         for line in file:
             parts = line.split()
@@ -201,33 +284,19 @@ def parse_log_file():
                 try:
                     timestamp = datetime.datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
                     timestamps[timestamp] = timestamps.get(timestamp, 0) + 1
-
                     protocol_info = parts[1].split('(')[0].lower()
                     if protocol_info in event_counts:
                         event_counts[protocol_info] += 1
                     else:
                         event_counts['other'] += 1
-
-                    if len(parts) > 6 and protocol_info == 'tcp':
-                        dst_port = parts[6].split(':')[0]
-                        src_ip = parts[3]
-                        if parts[2] == 'S' and not db.check_if_alert_exists(src_ip, dst_port, timestamp):
-                            send_alert(src_ip, dst_port, timestamp)
-
                 except ValueError as e:
                     print(f"Error parsing line: {line} - {e}")
-                    continue
-
     return timestamps, event_counts
 
-def is_valid_ip(ip):
-    try:
-        ipaddress.ip_address(ip)
-        return True
-    except ValueError:
-        return False
-
 def get_top_ips_from_logs():
+    """
+    Analyze the honeyd log file to extract and return the most frequently occurring source and destination IPs.
+    """
     src_ips = Counter()
     dst_ips = Counter()
     excluded_network = ipaddress.ip_network("10.10.10.0/24")
@@ -245,10 +314,12 @@ def get_top_ips_from_logs():
 
     top_src_ips = src_ips.most_common(10)
     top_dst_ips = dst_ips.most_common(10)
-
     return top_src_ips, top_dst_ips
 
 def get_top_ports_services_from_logs():
+    """
+    Analyze the honeyd log file to identify and return the most frequently accessed ports and services.
+    """
     ports_services = Counter()
 
     with open(honeyd_log, 'r') as file:
@@ -260,29 +331,34 @@ def get_top_ports_services_from_logs():
                     dst_port = parts[6].split(':')[0]
                     service = f"{protocol_info}/{dst_port}"
                     ports_services[service] += 1
-
                 except IndexError:
                     print(f"Error parsing line (IndexError): {line}")
                 except Exception as e:
                     print(f"Unexpected error parsing line: {line} - {e}")
 
     top_ports_services = ports_services.most_common(10)
-
     return top_ports_services
 
+def is_valid_ip(ip):
+    """
+    Check if a given string is a valid IP address.
+    """
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
+
+
 def signal_handler(signal, frame):
-    stop_system()
+    """Handle SIGINT to gracefully shut down the Flask application."""
+    controller.stop_system()
     sys.exit(0)
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
-    
-    try:
-        if os.getuid() != 0:
-            print("Please execute the system as root (sudo)")
-            exit(1)
-    except Exception as e:
-        raise Exception(e)
-
+    if os.getuid() != 0:
+        print("Please execute the system as root (sudo)")
+        sys.exit(1)
     app.run(debug=False, threaded=True, port=8000, use_reloader=False)
-    

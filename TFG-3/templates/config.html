@@ -49,13 +49,13 @@
         <input type="text" id="network_range" name="network_range" value="{{ config.network_range }}" required><br>
 
         <label for="whitelist_connections">Whitelist Connections:</label>
-        <input type="text" id="whitelist_connections" name="whitelist_connections" value="{{ config.whitelist_connections }}"><br>
+        <input type="text" id="whitelist_connections" name="whitelist_connections" pattern="[0-9-,.]" value="{{ config.whitelist_connections }}"><br>
 
         <label for="whitelist_ips">Whitelist IPs:</label>
-        <input type="text" id="whitelist_ips" name="whitelist_ips" value="{{ config.whitelist_ips }}"><br>
+        <input type="text" id="whitelist_ips" name="whitelist_ips" pattern="[0-9-,.+]" value="{{ config.whitelist_ips }}"><br>
 
         <label for="whitelist_ports">Whitelist Ports:</label>
-        <input type="text" id="whitelist_ports" name="whitelist_ports" value="{{ config.whitelist_ports }}"><br>
+        <input type="text" id="whitelist_ports" name="whitelist_ports" pattern="[0-9-,+]" value="{{ config.whitelist_ports }}"><br>
 
         <label for="scan_interval">Scan Interval (seconds):</label>
         <input type="number" id="scan_interval" name="scan_interval" min=0 value="{{ config.scan_interval }}" required><br>
