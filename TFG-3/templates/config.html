@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>System Configuration</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+    <style>
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            background-color: #333;
+            overflow: hidden;
+        }
+        .navbar .left, .navbar .right {
+            display: flex;
+        }
+        .navbar a {
+            display: block;
+            color: #f2f2f2;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+        }
+        .navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+        
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="left">
+            <a href="#" id="systemButton" onclick="toggleSystem()">Start System</a>
+        </div>
+        <div class="right">
+            <a href="/">Home</a>
+            <a href="/monitor">Monitor</a>
+            <a href="/map">Map</a>
+            <a href="/config">Config</a>
+            <a href="/alert">Alerts</a>
+        </div>
+    </div>
+    <h1>System Configuration</h1>
+    <form action="/config" method="POST">
+        <label for="network_range">Honeyd Network Range:</label>
+        <input type="text" id="network_range" name="network_range" value="{{ config.network_range }}" required><br>
+
+        <label for="whitelist_connections">Whitelist Connections:</label>
+        <input type="text" id="whitelist_connections" name="whitelist_connections" value="{{ config.whitelist_connections }}"><br>
+
+        <label for="whitelist_ips">Whitelist IPs:</label>
+        <input type="text" id="whitelist_ips" name="whitelist_ips" value="{{ config.whitelist_ips }}"><br>
+
+        <label for="whitelist_ports">Whitelist Ports:</label>
+        <input type="text" id="whitelist_ports" name="whitelist_ports" value="{{ config.whitelist_ports }}"><br>
+
+        <label for="scan_interval">Scan Interval (seconds):</label>
+        <input type="number" id="scan_interval" name="scan_interval" min=0 value="{{ config.scan_interval }}" required><br>
+
+        <label for="port_scan_interval">Port Scan Interval (days):</label>
+        <input type="number" id="port_scan_interval" name="port_scan_interval" min=0 value="{{ config.port_scan_interval }}" required><br>
+
+        <input type="submit" href="/" value="Save Configuration">
+    </form>
+
+    <script>
+        let systemRunning = false;
+
+        function toggleSystem() {
+            const button = document.getElementById('systemButton');
+            systemRunning = !systemRunning;
+
+            if (systemRunning) {
+                button.textContent = 'Stop System';
+                // Add the code to start the system
+                fetch('/start_system', { method: 'POST' });
+            } else {
+                button.textContent = 'Start System';
+                // Add the code to stop the system
+                fetch('/stop_system', { method: 'POST' });
+            }
+        }
+
+        var checkList = document.getElementById('list1');
+        checkList.getElementsByClassName('anchor')[0].onclick = function(evt) {
+        if (checkList.classList.contains('visible'))
+            checkList.classList.remove('visible');
+        else
+            checkList.classList.add('visible');
+        }
+    </script>
+</body>
+</html>

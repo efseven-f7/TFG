@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Honeypots Dashboard</title>
+    <style>
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            background-color: #333;
+            overflow: hidden;
+        }
+        .navbar .left, .navbar .right {
+            display: flex;
+        }
+        .navbar a {
+            display: block;
+            color: #f2f2f2;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+        }
+        .navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="left">
+            <a href="#" id="systemButton" onclick="toggleSystem()">Start System</a>
+        </div>
+        <div class="right">
+            <a href="/">Home</a>
+            <a href="/monitor">Monitor</a>
+            <a href="/map">Map</a>
+            <a href="/config">Config</a>
+            <a href="/alert">Alerts</a>
+        </div>
+    </div>
+
+    <h1>Honeypots Dashboard</h1>
+    <h2>Online devices</h2>
+
+    <table border="1" id="data-devices-table">
+        <thead>
+            <tr>
+                <th>IP</th>
+                <th>MAC</th>
+                <th>SERVICES</th>
+                <th>STATUS</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Los datos se cargarán aquí -->
+        </tbody>
+    </table>
+
+    <h2>Honeypots</h2>
+
+    <table border="1" id="data-honeypots-table">
+        <thead>
+            <tr>
+                <th>IP</th>
+                <th>MAC</th>
+                <th>Activity</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for honeypot in honeypots %}
+            <tr>
+                <td>{{ honeypot[0] }}</td>
+                <td>{{ honeypot[1] }}</td>
+                <td><a href="{{ url_for('honeypot_logs', ip=honeypot[0], mac=honeypot[1]) }}">View Logs</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <script>
+        function toggleSystem() {
+            const button = document.getElementById('systemButton');
+            const systemRunning = localStorage.getItem('systemRunning') === 'true';
+
+            if (systemRunning) {
+                button.textContent = 'Start System';
+                localStorage.setItem('systemRunning', 'false');
+                // Add the code to stop the system
+                fetch('/stop_system', { method: 'POST' });
+            } else {
+                button.textContent = 'Stop System';
+                localStorage.setItem('systemRunning', 'true');
+                // Add the code to start the system
+                fetch('/start_system', { method: 'POST' });
+            }
+        }
+        
+        document.addEventListener("DOMContentLoaded", function() {
+            loadDevicesData();
+            loadHoneypotsData();
+        });
+
+        function loadDevicesData() {
+            fetch('/get_devices_data')
+                .then(response => response.json())
+                .then(data => {
+                    var tableBody = document.getElementById("data-devices-table").getElementsByTagName("tbody")[0];
+                    tableBody.innerHTML = "";
+                    data.forEach(function(row) {
+                        var newRow = document.createElement("tr");
+                        newRow.innerHTML = "<td>" + row[0] + "</td><td>" + row[1] + "</td><td>" + (row[2] || '') + "</td><td>" + row[3] + "</td>";
+                        tableBody.appendChild(newRow);
+                    });
+                });
+        }
+    </script>
+</body>
+</html>

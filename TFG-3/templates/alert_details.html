@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Alert Details</title>
+    <style>
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            background-color: #333;
+            overflow: hidden;
+        }
+        .navbar .left, .navbar .right {
+            display: flex;
+        }
+        .navbar a {
+            display: block;
+            color: #f2f2f2;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+        }
+        .navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+        .container {
+            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="left">
+            <a href="#" id="systemButton" onclick="toggleSystem()">Start System</a>
+        </div>
+        <div class="right">
+            <a href="/">Home</a>
+            <a href="/monitor">Monitor</a>
+            <a href="/map">Map</a>
+            <a href="/config">Config</a>
+            <a href="/alert">Alerts</a>
+        </div>
+    </div>
+    <div class="container">
+        <h1>Alert Details</h1>
+        <p><strong>IP:</strong> {{ alert.ip }}</p>
+        <p><strong>Port:</strong> {{ alert.port }}</p>
+        <p><strong>Timestamp:</strong> {{ alert.timestamp }}</p>
+        <p><strong>Message:</strong> {{ alert.message }}</p>
+        <h2>Logs</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Log</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.timestamp }}</td>
+                    <td>{{ log.message }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
