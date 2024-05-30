@@ -7,7 +7,7 @@ from cupshelpers import getDevices
 from db_communication import get_config, get_device_data, insert_or_update_honeypot_log, update_honeypot_status, update_device_status
 
 def launch_honeyd(network_range, conf_file, log_file, serv_log_file):
-    comando = f"honeyd -f {conf_file} -l {log_file} -s {serv_log_file} {network_range} > /dev/null"
+    comando = f"honeyd -f {conf_file} -l {log_file} -s {serv_log_file} {network_range} &> /dev/null"
     proceso = subprocess.Popen(comando, shell=True)
     time.sleep(2)  # Espera un poco para que Honeyd se inicie completamente
 
@@ -46,7 +46,7 @@ def check_honeypot(ip):
     except subprocess.CalledProcessError:
         return False
 
-def lanzar_honeypot(hid, running_honeypots):
+def launch_honeypot(hid, running_honeypots):
     device = get_device_data(hid.get_ip(), hid.get_mac())
     services = device[2].strip().split(',')
 
@@ -64,8 +64,8 @@ def lanzar_honeypot(hid, running_honeypots):
         return running_honeypots
 
     try:
-        subprocess.run(f"echo 'bind {hid.get_ip()} system' | honeydctl", shell=True, check=True)
-        subprocess.run(f"echo 'set {hid.get_ip()} ethernet \"{hid.get_mac()}\"' | honeydctl", shell=True, check=True)
+        subprocess.run(f"echo 'bind {hid.get_ip()} system' | honeydctl &>/dev/null", shell=True, check=True)
+        subprocess.run(f"echo 'set {hid.get_ip()} ethernet \"{hid.get_mac()}\"' | honeydctl &>/dev/null", shell=True, check=True)
         if services:
             for service in services:
                 if service in config['whitelist_ports']:
@@ -87,10 +87,10 @@ def stop_honeypot(honeypot_ip):
     # Verifica si el honeypot ya está lanzado
     if check_honeypot(honeypot_ip):
         try:
-            subprocess.run(f"echo 'delete {honeypot_ip}' | honeydctl", shell=True, check=True)
+            subprocess.run(f"echo 'delete {honeypot_ip}' | honeydctl &>/dev/null", shell=True, check=True)
             time.sleep(1)
             while check_honeypot(honeypot_ip):
-                subprocess.run(f"echo 'delete {honeypot_ip}' | honeydctl", shell=True, check=True)
+                subprocess.run(f"echo 'delete {honeypot_ip}' | honeydctl &>/dev/null", shell=True, check=True)
             print(f"Honeypot {honeypot_ip} tumbado correctamente")
             update_honeypot_status(honeypot_ip, "offline")  # Actualiza el estado a 'offline'
         except subprocess.CalledProcessError as e:
